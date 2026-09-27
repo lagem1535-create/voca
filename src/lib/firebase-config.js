@@ -78,13 +78,26 @@ export function parseFirebaseConfig(raw) {
   return { config, error: null };
 }
 
+/**
+ * 브라우저에 내려줄 Firebase 설정.
+ * FIREBASE_DATABASE_URL 변수가 있으면 Realtime Database 주소(databaseURL)를 그 값으로 씁니다.
+ */
+export function firebaseClientConfig(env) {
+  const { config, error } = parseFirebaseConfig(env.FIREBASE_CONFIG);
+  if (!config) return { config, error };
+  const override = String(env.FIREBASE_DATABASE_URL ?? "").trim().replace(/\/+$/, "");
+  if (override) config.databaseURL = override;
+  else if (config.databaseURL) config.databaseURL = config.databaseURL.replace(/\/+$/, "");
+  return { config, error: null };
+}
+
 /** 에뮬레이터용 환경변수(로컬 개발 전용)를 브라우저가 쓸 수 있는 형태로 바꿉니다. */
 export function readEmulators(env) {
   const auth = String(env.FIREBASE_AUTH_EMULATOR_HOST ?? "").trim();
-  const firestore = String(env.FIRESTORE_EMULATOR_HOST ?? "").trim();
-  if (!auth && !firestore) return null;
+  const database = String(env.FIREBASE_DATABASE_EMULATOR_HOST ?? "").trim();
+  if (!auth && !database) return null;
   const out = {};
   if (auth) out.auth = auth.startsWith("http") ? auth : `http://${auth}`;
-  if (firestore) out.firestore = firestore.replace(/^https?:\/\//, "");
+  if (database) out.database = database.replace(/^https?:\/\//, "");
   return out;
 }

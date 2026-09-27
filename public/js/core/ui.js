@@ -214,7 +214,7 @@ export function renderFatal(err) {
   const help = setup
     ? `<ol class="help-list">
         <li>Cloudflare 대시보드 → Workers &amp; Pages → <b>voca</b> → 설정 → 변수 및 비밀</li>
-        <li><code>FIREBASE_CONFIG</code>(Firebase 웹 설정)와 <code>AI_API</code>(Gemini API 키)를 추가</li>
+        <li><code>FIREBASE_CONFIG</code>(Firebase 웹 설정, databaseURL 포함)와 <code>AI_API</code>(Gemini API 키)를 추가</li>
         <li>저장(배포) 후 이 페이지를 새로고침</li>
       </ol>
       <p class="muted">설정 상태는 <a href="/api/health" target="_blank" rel="noopener">/api/health</a>에서 확인할 수 있어요.</p>`

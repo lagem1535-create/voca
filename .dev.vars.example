@@ -5,9 +5,12 @@
 # Gemini API 키 (Google AI Studio에서 발급)
 AI_API=your-gemini-api-key
 
-# Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹) → SDK 설정의 firebaseConfig
+# Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹) → SDK 설정의 firebaseConfig (databaseURL 포함)
 # JSON 그대로 넣거나, 콘솔의 `const firebaseConfig = { ... };` 코드를 그대로 붙여넣어도 됩니다.
-FIREBASE_CONFIG='{"apiKey":"AIza...","authDomain":"your-project.firebaseapp.com","projectId":"your-project","storageBucket":"your-project.firebasestorage.app","messagingSenderId":"000000000000","appId":"1:000000000000:web:0000000000000000"}'
+FIREBASE_CONFIG='{"apiKey":"AIza...","authDomain":"your-project.firebaseapp.com","databaseURL":"https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app","projectId":"your-project","storageBucket":"your-project.firebasestorage.app","messagingSenderId":"000000000000","appId":"1:000000000000:web:0000000000000000"}'
+
+# (선택) FIREBASE_CONFIG에 databaseURL이 없을 때 Realtime Database 주소
+# FIREBASE_DATABASE_URL=https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app
 
 # (선택) 사용할 Gemini 모델. 쉼표로 여러 개 적으면 순서대로 시도합니다.
 # GEMINI_MODEL=gemini-3.8-flash
@@ -17,4 +20,4 @@ FIREBASE_CONFIG='{"apiKey":"AIza...","authDomain":"your-project.firebaseapp.com"
 
 # (선택) Firebase 에뮬레이터로 로컬 개발할 때만 사용
 # FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099
-# FIRESTORE_EMULATOR_HOST=127.0.0.1:8080
+# FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:9000
