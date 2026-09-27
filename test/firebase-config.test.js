@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseFirebaseConfig, readEmulators } from "../src/lib/firebase-config.js";
+import { parseFirebaseConfig, readEmulators, firebaseClientConfig } from "../src/lib/firebase-config.js";
 
 const expected = {
   apiKey: "AIzaSyTest",
@@ -49,10 +49,29 @@ test("값이 없거나 잘못되면 설명과 함께 null", () => {
   assert.match(parseFirebaseConfig('{"apiKey":"k"}').error, /projectId/);
 });
 
+test("Realtime Database 주소: 콘솔 코드의 databaseURL을 쓰고 FIREBASE_DATABASE_URL이 있으면 우선", () => {
+  const snippet = `const firebaseConfig = {
+  apiKey: "AIzaSyTest",
+  authDomain: "fir-2-f3b80.firebaseapp.com",
+  databaseURL: "https://fir-2-f3b80-default-rtdb.asia-southeast1.firebasedatabase.app/",
+  projectId: "fir-2-f3b80",
+};`;
+  assert.equal(
+    firebaseClientConfig({ FIREBASE_CONFIG: snippet }).config.databaseURL,
+    "https://fir-2-f3b80-default-rtdb.asia-southeast1.firebasedatabase.app",
+  );
+  assert.equal(
+    firebaseClientConfig({ FIREBASE_CONFIG: JSON.stringify(expected), FIREBASE_DATABASE_URL: " https://x.firebasedatabase.app/ " }).config.databaseURL,
+    "https://x.firebasedatabase.app",
+  );
+  assert.equal(firebaseClientConfig({ FIREBASE_CONFIG: JSON.stringify(expected) }).config.databaseURL, undefined);
+  assert.equal(firebaseClientConfig({}).config, null);
+});
+
 test("에뮬레이터 설정은 환경변수가 있을 때만 만든다", () => {
   assert.equal(readEmulators({}), null);
-  assert.deepEqual(readEmulators({ FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:9099", FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080" }), {
+  assert.deepEqual(readEmulators({ FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:9099", FIREBASE_DATABASE_EMULATOR_HOST: "127.0.0.1:9000" }), {
     auth: "http://127.0.0.1:9099",
-    firestore: "127.0.0.1:8080",
+    database: "127.0.0.1:9000",
   });
 });

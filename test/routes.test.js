@@ -5,7 +5,7 @@ import { _resetKeyCache } from "../src/lib/auth.js";
 import { _resetGeminiState } from "../src/lib/gemini.js";
 import { buildBlankQuestions, parseBlankRequest } from "../src/routes/ai-blank.js";
 import { normalizeWordItems, parseWordRequest } from "../src/routes/ai-word.js";
-import { FIREBASE_CONFIG, createSigner, geminiResponse, jsonResponse, mockFetch } from "./helpers.js";
+import { DATABASE_URL, FIREBASE_CONFIG, createSigner, geminiResponse, jsonResponse, mockFetch } from "./helpers.js";
 
 const signer = await createSigner();
 const env = { AI_API: "test-key", FIREBASE_CONFIG };
@@ -49,6 +49,7 @@ test("/api/config는 Firebase 설정만 돌려주고 비밀값은 내보내지 �
   assert.equal(res.status, 200);
   const data = await res.json();
   assert.equal(data.firebase.projectId, "demo-voca");
+  assert.equal(data.firebase.databaseURL, DATABASE_URL);
   assert.equal(data.emulators, undefined);
   assert.ok(!JSON.stringify(data).includes("test-key"));
 
@@ -61,9 +62,13 @@ test("/api/health는 설정 여부만 알려준다", async () => {
   const data = await (await handleApi(request("/api/health"), env)).json();
   assert.equal(data.ok, true);
   assert.equal(data.firebaseConfig.projectId, "demo-voca");
+  assert.deepEqual(data.database, { ok: true, url: DATABASE_URL });
   assert.ok(!JSON.stringify(data).includes("test-key"));
   const empty = await (await handleApi(request("/api/health"), {})).json();
   assert.equal(empty.ok, false);
+  const noDatabase = await (await handleApi(request("/api/health"), { ...env, FIREBASE_CONFIG: '{"apiKey":"k","projectId":"p"}' })).json();
+  assert.equal(noDatabase.ok, false);
+  assert.equal(noDatabase.database.ok, false);
 });
 
 test("AI API는 로그인 토큰 없이는 401", async () => {

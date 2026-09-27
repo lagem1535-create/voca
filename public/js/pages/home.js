@@ -2,7 +2,8 @@
 
 import { setupPage } from "../core/page.js";
 import { displayName } from "../core/auth.js";
-import { countWords, countWeakWords, listWeakWords, listResults, dbErrorMessage } from "../core/db.js";
+import { listWords, listResults, dbErrorMessage } from "../core/db.js";
+import { wordsInScope } from "../core/quiz.js";
 import { esc, icon, loadingHtml, formatDate, renderError } from "../core/ui.js";
 
 const TEST_NAMES = { choice: "5지선다", blank: "AI 빈칸" };
@@ -15,18 +16,17 @@ export default async function mountHome() {
   const { user, main } = await setupPage({ active: "home", title: "홈" });
   main.innerHTML = loadingHtml();
 
-  let total, weakCount, weakWords, results;
+  let words, results;
   try {
-    [total, weakCount, weakWords, results] = await Promise.all([
-      countWords(user.uid),
-      countWeakWords(user.uid),
-      listWeakWords(user.uid, 5),
-      listResults(user.uid, 10),
-    ]);
+    [words, results] = await Promise.all([listWords(user.uid), listResults(user.uid, 10)]);
   } catch (err) {
     renderError(main, "단어장을 불러오지 못했어요", dbErrorMessage(err));
     return;
   }
+  const total = words.length;
+  const weak = wordsInScope(words, "wrong"); // 틀린 비율이 높은 순
+  const weakCount = weak.length;
+  const weakWords = weak.slice(0, 5);
 
   const asked = results.reduce((sum, result) => sum + (Number(result.total) || 0), 0);
   const right = results.reduce((sum, result) => sum + (Number(result.correct) || 0), 0);

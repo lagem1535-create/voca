@@ -1,9 +1,11 @@
 // 테스트 공용 도우미: 가짜 Google 공개키/토큰, fetch 대체
 
 export const PROJECT_ID = "demo-voca";
+export const DATABASE_URL = `https://${PROJECT_ID}-default-rtdb.asia-southeast1.firebasedatabase.app`;
 export const FIREBASE_CONFIG = JSON.stringify({
   apiKey: "test-api-key",
   authDomain: `${PROJECT_ID}.firebaseapp.com`,
+  databaseURL: DATABASE_URL,
   projectId: PROJECT_ID,
   appId: "1:1:web:1",
 });

@@ -3,7 +3,7 @@
 
 import { setupPage } from "../core/page.js";
 import { addWord, addWords, updateWord, deleteWord, getWord, findWordsByText, dbErrorMessage } from "../core/db.js";
-import { generateWordInfo } from "../core/api.js";
+import { generateWordInfo, ApiError } from "../core/api.js";
 import { $, $$, esc, icon, setBusy, toast, flash, highlight, loadingHtml, messageHtml, prefs, renderError } from "../core/ui.js";
 import { cleanText, splitWordList } from "../shared/text.js";
 
@@ -383,7 +383,7 @@ function bindBulk(user, panel) {
       existing = await findWordsByText(user.uid, items.map((item) => item.word));
       renderReview(failed, firstError);
     } catch (err) {
-      showError(err?.code && !err.status ? dbErrorMessage(err) : err?.message || "AI 생성에 실패했어요.");
+      showError(err instanceof ApiError ? err.message : dbErrorMessage(err));
     } finally {
       done();
     }

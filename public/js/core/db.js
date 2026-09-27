@@ -1,55 +1,57 @@
-// Firestore 저장소
-//   users/{uid}/words/{단어ID}    단어·뜻·예문·시험 통계
-//   users/{uid}/results/{기록ID}  시험 결과
+// Realtime Database 저장소 (Firebase 콘솔의 Realtime Database)
+//   users/{uid}/voca/words/{단어ID}    단어·뜻·예문·시험 통계
+//   users/{uid}/voca/results/{기록ID}  시험 결과
+// 규칙: users/{uid}/voca 는 로그인한 본인만 읽고 쓸 수 있어야 합니다. (database.rules.json)
 
 import {
   getFirebase,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  getCount,
-  addDoc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
+  ref,
+  get,
+  set,
+  update,
+  push,
+  remove,
   query,
-  where,
-  orderBy,
-  limit,
+  orderByKey,
+  limitToLast,
   serverTimestamp,
   increment,
-  writeBatch,
 } from "./firebase.js";
 import { cleanText } from "../shared/text.js";
 
-const IN_QUERY_LIMIT = 30;
-const BATCH_LIMIT = 450;
+const MAX_EXAMPLES = 5;
 
-async function db() {
+async function database() {
   return (await getFirebase()).db;
 }
 
-const wordsCol = (database, uid) => collection(database, "users", uid, "words");
-const resultsCol = (database, uid) => collection(database, "users", uid, "results");
-const wordDoc = (database, uid, id) => doc(database, "users", uid, "words", id);
+const basePath = (uid) => `users/${uid}/voca`;
+const wordsPath = (uid) => `${basePath(uid)}/words`;
 
 function toDate(value) {
-  if (!value) return null;
-  if (typeof value.toDate === "function") return value.toDate();
-  return value instanceof Date ? value : null;
+  return typeof value === "number" && Number.isFinite(value) ? new Date(value) : null;
 }
 
-function fromWordSnap(snap) {
-  const data = snap.data() || {};
+// Realtime Database는 배열을 {0: …, 1: …} 객체로 돌려줄 수 있어서 둘 다 받습니다.
+function toList(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  return value && typeof value === "object" ? Object.values(value).filter(Boolean) : [];
+}
+
+const timeOf = (date) => (date instanceof Date ? date.getTime() : 0);
+
+function fromWord(id, data) {
   return {
-    id: snap.id,
+    id,
     word: data.word ?? "",
     meaning: data.meaning ?? "",
     partOfSpeech: data.partOfSpeech ?? "",
     pronunciation: data.pronunciation ?? "",
     language: data.language ?? "",
-    examples: Array.isArray(data.examples) ? data.examples : [],
+    examples: toList(data.examples).map((example) => ({
+      sentence: example.sentence ?? "",
+      translation: example.translation ?? "",
+    })),
     memo: data.memo ?? "",
     correct: Number(data.correct) || 0,
     wrong: Number(data.wrong) || 0,
@@ -69,13 +71,13 @@ export function sanitizeWord(input) {
     partOfSpeech: cleanText(input.partOfSpeech, 60),
     pronunciation: cleanText(input.pronunciation, 80),
     language: cleanText(input.language, 20).toLowerCase(),
-    examples: (Array.isArray(input.examples) ? input.examples : [])
+    examples: toList(input.examples)
       .map((example) => ({
         sentence: cleanText(example?.sentence, 300),
         translation: cleanText(example?.translation, 300),
       }))
       .filter((example) => example.sentence)
-      .slice(0, 5),
+      .slice(0, MAX_EXAMPLES),
     memo: String(input.memo ?? "").trim().slice(0, 1000),
   };
 }
@@ -85,25 +87,34 @@ function assertWord(data) {
   if (!data.meaning) throw new Error("뜻을 입력해 주세요.");
 }
 
+function newWordRecord(data) {
+  return { ...data, correct: 0, wrong: 0, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+}
+
+/** 모든 단어 (최근 추가 순) */
 export async function listWords(uid) {
-  const snap = await getDocs(query(wordsCol(await db(), uid), orderBy("createdAt", "desc")));
-  return snap.docs.map(fromWordSnap);
+  const snap = await get(ref(await database(), wordsPath(uid)));
+  const value = snap.val() || {};
+  return Object.entries(value)
+    .filter(([, data]) => data && typeof data.word === "string" && data.word)
+    .map(([id, data]) => fromWord(id, data))
+    .sort((a, b) => timeOf(b.createdAt) - timeOf(a.createdAt) || (a.id < b.id ? 1 : -1));
 }
 
 export async function getWord(uid, id) {
-  const snap = await getDoc(wordDoc(await db(), uid, id));
-  return snap.exists() ? fromWordSnap(snap) : null;
+  const snap = await get(ref(await database(), `${wordsPath(uid)}/${id}`));
+  const data = snap.val();
+  return data && typeof data.word === "string" && data.word ? fromWord(id, data) : null;
 }
 
 /** 이미 저장된 단어를 찾습니다. (대소문자 무시) → Map<소문자 단어, 단어> */
 export async function findWordsByText(uid, texts) {
-  const database = await db();
-  const lowers = [...new Set(texts.map((text) => cleanText(text, 100).toLowerCase()).filter(Boolean))];
+  const wanted = new Set(texts.map((text) => cleanText(text, 100).toLowerCase()).filter(Boolean));
   const found = new Map();
-  for (let i = 0; i < lowers.length; i += IN_QUERY_LIMIT) {
-    const chunk = lowers.slice(i, i + IN_QUERY_LIMIT);
-    const snap = await getDocs(query(wordsCol(database, uid), where("wordLower", "in", chunk)));
-    for (const item of snap.docs.map(fromWordSnap)) found.set(item.word.toLowerCase(), item);
+  if (!wanted.size) return found;
+  for (const word of await listWords(uid)) {
+    const key = word.word.toLowerCase();
+    if (wanted.has(key) && !found.has(key)) found.set(key, word);
   }
   return found;
 }
@@ -111,122 +122,70 @@ export async function findWordsByText(uid, texts) {
 export async function addWord(uid, input) {
   const data = sanitizeWord(input);
   assertWord(data);
-  const ref = await addDoc(wordsCol(await db(), uid), {
-    ...data,
-    correct: 0,
-    wrong: 0,
-    lastTestedAt: null,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  return ref.id;
+  const newRef = push(ref(await database(), wordsPath(uid)));
+  await set(newRef, newWordRecord(data));
+  return newRef.key;
 }
 
-/** 여러 단어를 한 번에 저장합니다. */
+/** 여러 단어를 한 번에(원자적으로) 저장합니다. */
 export async function addWords(uid, inputs) {
-  const database = await db();
   const items = inputs.map(sanitizeWord);
   items.forEach(assertWord);
-  for (let i = 0; i < items.length; i += BATCH_LIMIT) {
-    const batch = writeBatch(database);
-    for (const data of items.slice(i, i + BATCH_LIMIT)) {
-      batch.set(doc(wordsCol(database, uid)), {
-        ...data,
-        correct: 0,
-        wrong: 0,
-        lastTestedAt: null,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    }
-    await batch.commit();
-  }
+  const listRef = ref(await database(), wordsPath(uid));
+  const updates = {};
+  for (const data of items) updates[push(listRef).key] = newWordRecord(data);
+  await update(listRef, updates);
   return items.length;
 }
 
 export async function updateWord(uid, id, input) {
   const data = sanitizeWord(input);
   assertWord(data);
-  await updateDoc(wordDoc(await db(), uid, id), { ...data, updatedAt: serverTimestamp() });
+  await update(ref(await database(), `${wordsPath(uid)}/${id}`), { ...data, updatedAt: serverTimestamp() });
 }
 
 export async function deleteWord(uid, id) {
-  await deleteDoc(wordDoc(await db(), uid, id));
-}
-
-export async function countWords(uid) {
-  const snap = await getCount(wordsCol(await db(), uid));
-  return snap.data().count;
-}
-
-export async function countWeakWords(uid) {
-  const snap = await getCount(query(wordsCol(await db(), uid), where("wrong", ">", 0)));
-  return snap.data().count;
-}
-
-/** 많이 틀린 단어 */
-export async function listWeakWords(uid, max = 5) {
-  const snap = await getDocs(
-    query(wordsCol(await db(), uid), where("wrong", ">", 0), orderBy("wrong", "desc"), limit(max)),
-  );
-  return snap.docs.map(fromWordSnap);
+  await remove(ref(await database(), `${wordsPath(uid)}/${id}`));
 }
 
 /**
- * 시험 결과를 저장하고 단어별 정답/오답 횟수를 올립니다.
+ * 시험 결과를 저장하고 단어별 정답/오답 횟수를 올립니다. (한 번에 원자적으로)
  * @param {{ type: string, total: number, correct: number, [key: string]: any }} result
  * @param {{ id: string, correct: boolean }[]} answers
  */
 export async function saveTestResult(uid, result, answers) {
-  const database = await db();
-  const resultRef = doc(resultsCol(database, uid));
-  const record = { ...result, createdAt: serverTimestamp() };
-  const batch = writeBatch(database);
-  batch.set(resultRef, record);
-  for (const answer of answers.slice(0, BATCH_LIMIT)) {
+  const db = await database();
+  const resultKey = push(ref(db, `${basePath(uid)}/results`)).key;
+  const updates = { [`results/${resultKey}`]: { ...result, createdAt: serverTimestamp() } };
+  for (const answer of answers) {
     if (!answer.id) continue;
-    batch.update(wordDoc(database, uid, answer.id), {
-      [answer.correct ? "correct" : "wrong"]: increment(1),
-      lastTestedAt: serverTimestamp(),
-    });
+    updates[`words/${answer.id}/${answer.correct ? "correct" : "wrong"}`] = increment(1);
+    updates[`words/${answer.id}/lastTestedAt`] = serverTimestamp();
   }
-  try {
-    await batch.commit();
-  } catch (err) {
-    // 시험 도중 다른 곳에서 단어를 지운 경우: 결과만 저장
-    if (err?.code !== "not-found") throw err;
-    await setDoc(resultRef, record);
-  }
+  await update(ref(db, basePath(uid)), updates);
 }
 
+/** 최근 시험 기록 (최신 순). 기록 ID(push 키)가 시간 순이라 키 순서로 가져옵니다. */
 export async function listResults(uid, max = 10) {
-  const snap = await getDocs(query(resultsCol(await db(), uid), orderBy("createdAt", "desc"), limit(max)));
-  return snap.docs.map((item) => {
-    const data = item.data();
-    return { id: item.id, ...data, createdAt: toDate(data.createdAt) };
+  const snap = await get(query(ref(await database(), `${basePath(uid)}/results`), orderByKey(), limitToLast(max)));
+  const results = [];
+  snap.forEach((child) => {
+    const data = child.val() || {};
+    results.push({ ...data, id: child.key, createdAt: toDate(data.createdAt) });
   });
+  return results.reverse();
 }
 
 export function dbErrorMessage(err) {
-  const message = String(err?.message || "");
-  if (/database .*does not exist/i.test(message) || /has not been used|is disabled/i.test(message)) {
-    return "Firestore 데이터베이스가 준비되지 않았습니다. Firebase 콘솔 → Firestore Database → 데이터베이스 만들기를 진행해 주세요.";
+  const message = String(err?.message || err || "");
+  if (/permission[_ ]denied/i.test(message)) {
+    return "Realtime Database 규칙 때문에 거부되었습니다. Firebase 콘솔 → Realtime Database → 규칙에서 users/$uid/voca 읽기·쓰기를 본인에게 허용해 주세요. (README의 규칙 참고)";
   }
-  switch (err?.code) {
-    case "permission-denied":
-      return "Firestore 보안 규칙 때문에 거부되었습니다. Firebase 콘솔의 Firestore 규칙에 저장소의 firestore.rules 내용을 붙여넣어 주세요.";
-    case "unauthenticated":
-      return "로그인이 필요합니다. 다시 로그인해 주세요.";
-    case "unavailable":
-    case "deadline-exceeded":
-      return "Firestore에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.";
-    case "resource-exhausted":
-      return "Firestore 사용량 한도를 넘었습니다. 잠시 후 다시 시도해 주세요.";
-    case "failed-precondition":
-      return "Firestore 설정(색인 또는 데이터베이스)이 준비되지 않았습니다.";
-    case "not-found":
-      return "데이터를 찾을 수 없습니다. 이미 삭제되었을 수 있어요.";
-    default:
-      return message || "데이터를 처리하는 중 오류가 발생했습니다.";
+  if (/different region|database url|databaseurl/i.test(message)) {
+    return "FIREBASE_CONFIG의 databaseURL이 실제 Realtime Database 주소와 다릅니다. Firebase 콘솔 → Realtime Database 화면의 주소로 바꿔 주세요.";
   }
+  if (/offline|network|timeout/i.test(message)) {
+    return "Realtime Database에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.";
+  }
+  return message || "데이터를 처리하는 중 오류가 발생했습니다.";
 }
