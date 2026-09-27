@@ -1,0 +1,10 @@
+rules_version = '2';
+
+// 로그인한 사용자는 자기 단어장(users/{내 uid}/...)만 읽고 쓸 수 있습니다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

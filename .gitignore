@@ -1,0 +1,12 @@
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+*.log
+.DS_Store
+.firebase/
+firebase-debug.log
+firestore-debug.log
