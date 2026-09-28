@@ -1,2 +1,0 @@
-AI_API=your-gemini-api-key
-FIREBASE_CONFIG={"apiKey":"...","authDomain":"...","databaseURL":"https://...firebasedatabase.app","projectId":"...","appId":"..."}
