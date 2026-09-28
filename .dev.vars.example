@@ -1,0 +1,28 @@
+# 로컬 개발(npm run dev)용 환경변수 예시입니다.
+# 이 파일을 .dev.vars 로 복사한 뒤 값을 채우세요. (.dev.vars 는 git 에 올라가지 않습니다)
+# 배포된 Worker 에서는 Cloudflare 대시보드 → Workers & Pages → voca → 설정 → 변수 및 비밀 에 같은 이름으로 넣습니다.
+
+# Gemini API 키 (https://aistudio.google.com/apikey)
+AI_API=your-gemini-api-key
+
+# Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹) → SDK 설정 및 구성의 firebaseConfig
+# JSON 으로 넣거나, 콘솔의 `const firebaseConfig = { ... };` 코드를 그대로 붙여넣어도 됩니다.
+FIREBASE_CONFIG='{"apiKey":"AIza...","authDomain":"your-project.firebaseapp.com","databaseURL":"https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app","projectId":"your-project","storageBucket":"your-project.firebasestorage.app","messagingSenderId":"000000000000","appId":"1:000000000000:web:0000000000000000"}'
+
+# ── 아래는 모두 선택 ──
+
+# FIREBASE_CONFIG 에 databaseURL 이 없고 자동으로 찾지 못할 때 Realtime Database 주소
+# FIREBASE_DATABASE_URL=https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app
+
+# 사용할 Gemini 모델. 쉼표로 여러 개 적으면 앞에서부터 시도합니다.
+# GEMINI_MODEL=gemini-3.6-flash,gemini-3.5-flash-lite
+
+# Gemini API 주소 (Cloudflare AI Gateway 를 쓸 때 등)
+# GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+
+# AI 기능을 쓸 수 있는 이메일(쉼표 구분). 비워 두면 로그인한 모든 사용자가 사용할 수 있습니다.
+# ALLOWED_EMAILS=me@example.com
+
+# Firebase 에뮬레이터로 개발할 때만
+# FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099
+# FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:9000
